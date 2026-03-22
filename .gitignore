@@ -1,39 +1,16 @@
-# Dependencies
-node_modules/
-.pnpm-store/
-package-lock.json
-pnpm-lock.yaml
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+next.user-config.*
 
-# Next.js
+# Environment variables
+.env*.local
+
+# Common ignores
+node_modules
 .next/
-out/
-build/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-env/
-venv/
-ENV/
-
-# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Logs
-*.log
-nohup.out
-
-# Local Env
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local

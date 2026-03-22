@@ -26,28 +26,30 @@ An interactive F1 race simulation game built with Python (FastAPI) and React (Ne
 ### Running the Backend
 
 1. Install dependencies (if any):
-   ```bash
-   pip install fastapi uvicorn
-   ```
+
+```bash
+pip install fastapi uvicorn
+```
+
 2. Start the server:
-   ```bash
-   python -m uvicorn app:app --port 8000
-   ```
+
+```bash
+python -m uvicorn app:app --port 8000
+```
 
 ### Running the Frontend
 
-1. Navigate to the web folder:
-   ```bash
-   cd web_page_v1
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Run the development server:
+
+```bash
+npm run dev
+```
 
 ## Key Mechanics
 
