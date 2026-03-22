@@ -121,12 +121,15 @@ We finalized the user experience with several highly requested features:
 
 ### 10. Project Deployment
 
-- **GitHub Repository**: [https://github.com/allenxu9721224-lab/F1_simulation](https://github.com/allenxu9721224-lab/F1_simulation)
+- **Font & Version Optimization**: Fixed `layout.tsx` to correctly inject pixel and system fonts. Standardized the Next.js version to **15.1.0** for maximum cloud compatibility.
 - **Project Structure**: Organized as a flattened Next.js project with `f1_sim.py`/`app.py` coexisting at the root for maximum compatibility with V0 and other AI tools.
 - **V0 Compatibility**: 
     - [x] Flattened structure (no more sub-folders for package.json).
+    - [x] Implement V0 Preview Fallback (Demo Mode)
+    - [x] Add `isDemoMode` state and mock driver data
+    - [x] Normalize repository (Next.js 15.1.0 + cleanup lockfiles)
+    - [x] Verify build and re-push
     - [x] **Backend Fallback (Demo Mode)**: Automatically activates if the Python API is unreachable, allowing for a fully functional UI preview in cloud environments.
-    - [x] **Font Optimization**: Fixed `layout.tsx` to correctly inject pixel and system fonts.
 
 ### 11. Weather & Physics Rebalance
 
