@@ -3,9 +3,21 @@ import { Geist, Geist_Mono, Press_Start_2P } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
-const _pressStart2P = Press_Start_2P({ weight: "400", subsets: ["latin"] });
+const _geist = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const _geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const _pressStart2P = Press_Start_2P({
+  variable: "--font-pixel",
+  weight: "400",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: 'F1 Race Strategy | Team Principal',
@@ -37,7 +49,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">
+      <body className={`${_geist.variable} ${_geistMono.variable} ${_pressStart2P.variable} font-sans antialiased`}>
         {children}
         <Analytics />
       </body>

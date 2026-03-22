@@ -78,6 +78,29 @@ const teamColors: Record<string, string> = {
 
 const API_URL = "http://127.0.0.1:8000"
 
+const MOCK_DRIVERS: Driver[] = [
+  { position: 1, name: "Max Verstappen", team: "Red Bull", tire: "S", gap: "Leader", isPlayer: false, trackPosition: 1.0 },
+  { position: 2, name: "Charles Leclerc", team: "Ferrari", tire: "M", gap: "+0.8s", isPlayer: true, trackPosition: 0.95 },
+  { position: 3, name: "Lando Norris", team: "McLaren", tire: "S", gap: "+1.5s", isPlayer: false, trackPosition: 0.90 },
+  { position: 4, name: "Lewis Hamilton", team: "Mercedes", tire: "M", gap: "+2.2s", isPlayer: false, trackPosition: 0.85 },
+  { position: 5, name: "Oscar Piastri", team: "McLaren", tire: "S", gap: "+4.1s", isPlayer: false, trackPosition: 0.80 },
+  { position: 6, name: "Carlos Sainz", team: "Ferrari", tire: "M", gap: "+4.8s", isPlayer: false, trackPosition: 0.75 },
+  { position: 7, name: "George Russell", team: "Mercedes", tire: "S", gap: "+6.2s", isPlayer: false, trackPosition: 0.70 },
+  { position: 8, name: "Fernando Alonso", team: "Aston Martin", tire: "H", gap: "+10.1s", isPlayer: false, trackPosition: 0.65 },
+  { position: 9, name: "Sergio Perez", team: "Red Bull", tire: "H", gap: "+12.4s", isPlayer: false, trackPosition: 0.60 },
+  { position: 10, name: "Nico Hulkenberg", team: "Haas", tire: "M", gap: "+15.3s", isPlayer: false, trackPosition: 0.55 },
+  { position: 11, name: "Lance Stroll", team: "Aston Martin", tire: "H", gap: "+18.1s", isPlayer: false, trackPosition: 0.50 },
+  { position: 12, name: "Yuki Tsunoda", team: "RB", tire: "S", gap: "+20.5s", isPlayer: false, trackPosition: 0.45 },
+  { position: 13, name: "Alex Albon", team: "Williams", tire: "M", gap: "+22.4s", isPlayer: false, trackPosition: 0.40 },
+  { position: 14, name: "Daniel Ricciardo", team: "RB", tire: "S", gap: "+24.1s", isPlayer: false, trackPosition: 0.35 },
+  { position: 15, name: "Pierre Gasly", team: "Alpine", tire: "H", gap: "+26.8s", isPlayer: false, trackPosition: 0.30 },
+  { position: 16, name: "Esteban Ocon", team: "Alpine", tire: "M", gap: "+28.2s", isPlayer: false, trackPosition: 0.25 },
+  { position: 17, name: "Valtteri Bottas", team: "Sauber", tire: "H", gap: "+31.5s", isPlayer: false, trackPosition: 0.20 },
+  { position: 18, name: "Zhou Guanyu", team: "Sauber", tire: "M", gap: "+33.1s", isPlayer: false, trackPosition: 0.15 },
+  { position: 19, name: "Kevin Magnussen", team: "Haas", tire: "H", gap: "+35.8s", isPlayer: false, trackPosition: 0.10 },
+  { position: 20, name: "Franco Colapinto", team: "Williams", tire: "S", gap: "+38.4s", isPlayer: false, trackPosition: 0.05 }
+]
+
 // ==================== FIREWORKS ANIMATION ====================
 function Fireworks() {
   const [particles, setParticles] = useState<Array<{
@@ -266,6 +289,7 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
   const [weather, setWeather] = useState<"sunny" | "cloudy" | "rain">("cloudy")
   
   const [isAutoPlaying, setIsAutoPlaying] = useState(false)
+  const [isDemoMode, setIsDemoMode] = useState(false)
   const [showDecision, setShowDecision] = useState(false)
   const [decisionType, setDecisionType] = useState<"pit" | "overtake">("pit")
   const [strategyCooldown, setStrategyCooldown] = useState(0)
@@ -282,7 +306,15 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
   useEffect(() => {
     const startRemoteGame = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/start`, { method: "POST" })
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000)
+        
+        const res = await fetch(`${API_URL}/api/start`, { 
+          method: "POST",
+          signal: controller.signal 
+        })
+        clearTimeout(timeoutId)
+        
         const data = await res.json()
         if (data.status === "started") {
           setTotalLaps(data.total_laps || track.laps)
@@ -302,16 +334,55 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
           setIsAutoPlaying(true)
         }
       } catch (e) {
-        console.error("Failed to start F1 API", e)
+        console.warn("Backend unreachable, entering DEMO MODE", e)
+        setIsDemoMode(true)
+        setDrivers(MOCK_DRIVERS)
+        setCurrentLap(1)
+        setRadioMessages([{
+          id: generateMessageId("msg"),
+          lap: 0,
+          type: "strategy",
+          message: "⚠️ 正在以 DEMO 模式运行 (未检测到后端 API)",
+          timestamp: new Date().toLocaleTimeString("zh-CN")
+        }])
+        setIsAutoPlaying(true)
       }
     }
     startRemoteGame()
-  }, [])
+  }, [track.laps])
 
   const nextLap = useCallback(async () => {
+    if (isDemoMode) {
+      setCurrentLap(prev => {
+        if (prev >= totalLaps) {
+          setIsAutoPlaying(false)
+          setRaceFinished(true)
+          setFinalResults(drivers.map(d => ({
+            ...d,
+            status: "Racing"
+          })))
+          return prev
+        }
+        return prev + 1
+      })
+      
+      const randomEvent = Math.random()
+      if (randomEvent > 0.8) {
+        setRadioMessages(prev => [...prev, {
+          id: generateMessageId("msg"),
+          lap: currentLap,
+          type: "normal",
+          message: `Lap ${currentLap}: 打击感十足的一圈，保持住。`,
+          timestamp: new Date().toLocaleTimeString("zh-CN")
+        }])
+      }
+      return
+    }
+
     try {
       const res = await fetch(`${API_URL}/api/advance`, { method: "POST" })
       const data = await res.json()
+      // ... rest of same logic
       
       if (data.error) {
          console.error(data.error)
@@ -679,6 +750,11 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
 
         {/* Broadcast Status Indicator */}
         <div className="flex items-center gap-3">
+            {isDemoMode && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-yellow-500/20 rounded border border-yellow-500/50">
+                    <span className="text-[10px] text-yellow-500 font-bold tracking-widest" style={{ fontFamily: "var(--font-pixel)" }}>⚠️ DEMO MODE</span>
+                </div>
+            )}
             {isAutoPlaying ? (
                 <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 rounded border border-green-500/50">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
