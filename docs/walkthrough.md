@@ -15,17 +15,17 @@ I have successfully replaced the track visual assets throughout the entire appli
 *   **Problem:** The car coordinates were hardcoded for the "Monaco" track layout, resulting in cars drawing arbitrary paths unrelated to the new background images. Even after correcting the raw path strings, the cars misaligned with the image backgrounds because the `<svg>` overlay was `4:3` (stretched responsive) while the track images were perfectly `16:9` (`object-contain`), leading to different letter-boxing behaviors.
 *   **Resolution:**
     1.  **Dynamic Parsing:** Rewrote the `getCarPosition` function to parse raw `M`, `L`, and `Q` SVG commands into polylines. This guarantees that regardless of the track chosen, the cars computationally "trace" the exact `pathData` curve!
-2. **Coordinates Tracing:** Derived new 16:9 coordinate paths for Monza, Shanghai, Silverstone, and Singapore that overlay the black road markings perfectly on a `viewBox="0 0 400 225"` grid.
-3. **Layout Synchronization:** Restructured the `PixelTrack` component DOM. Encapsulated both the `<img object-contain>` and the `<svg>` overlay within a strict `aspect-video` container wrapper. This locks their aspect ratios and scaling factors, eliminating the previous layout gap.
+    2.  **Coordinates Tracing:** Derived new 16:9 coordinate paths for Monza, Shanghai, Silverstone, and Singapore that overlay the black road markings perfectly on a `viewBox="0 0 400 225"` grid.
+    3.  **Layout Synchronization:** Restructured the `PixelTrack` component DOM. Encapsulated both the `<img object-contain>` and the `<svg>` overlay within a strict `aspect-video` container wrapper. This locks their aspect ratios and scaling factors, eliminating the previous layout gap.
 
 #### Alignment Verification Results
 *   The final browser evaluation proved that cars drive entirely within the black track lines provided by the static image assets, even through complex curves like the Shanghai snail corner.
 
-![Singapore Final Verification Verification](./media/singapore_race_verification_1774160773641.png)
+![Singapore Final Verification Verification](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/singapore_race_verification_1774160773641.png)
 
-![Shanghai Final Verification Verification](./media/shanghai_verification_final_1774160424096.png)
+![Shanghai Final Verification Verification](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/shanghai_verification_final_1774160424096.png)
 
-![Final Simulation Verification Video](./media/verify_car_paths_final_1774160683350.webp)
+![Final Simulation Verification Video](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/verify_car_paths_final_1774160683350.webp)
 
 - **Dynamic Path Simulation**: Implemented custom SVG paths for **Shanghai** and **Singapore** so that the simulation cars correctly navigate these new tracks.
 - **Visual Polish**: Adjusted car sizes, colors, and shadows to better stand out against the new backgrounds. Optimized the "CRT/Scanline" effects for the new assets.
@@ -33,14 +33,14 @@ I have successfully replaced the track visual assets throughout the entire appli
 ## Visual Verification
 
 ### Track Selection (Landing Page)
-![Track Selection](./media/track_carousel_verification_1774158908577.png)
+![Track Selection](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/track_carousel_verification_1774158908577.png)
 
 ### Race Simulation (Shanghai GP Example)
-![Race Simulation Background](./media/shanghai_race_simulation_1774159104413.png)
+![Race Simulation Background](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/shanghai_race_simulation_1774159104413.png)
 
 ## Verification Recording
 You can watch the full verification of the track selection and race start here:
-![Full Verification](./media/verify_race_track_image_1774159084728.webp)
+![Full Verification](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/verify_race_track_image_1774159084728.webp)
 
 The demo is currently running on [http://localhost:1616](http://localhost:1616).
 
@@ -63,9 +63,9 @@ We successfully verified the API bridge:
 - ✅ The TEAM RADIO feed scrolls seamlessly with real event logs from Python.
 - ✅ The Auto-Play loop pauses and correctly locks the view during strategy calls, successfully resuming right after tire selections.
 
-![Critical Strategy Decision Modal](./media/.system_generated/click_feedback/click_feedback_1774163102204.png)
+![Critical Strategy Decision Modal](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/.system_generated/click_feedback/click_feedback_1774163102204.png)
 
-![Auto-Play Loop Full Test Video](./media/auto_play_test_1774162925915.webp)
+![Auto-Play Loop Full Test Video](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/auto_play_test_1774162925915.webp)
 
 ---
 
@@ -91,7 +91,7 @@ We finalized the user experience with several highly requested features:
 - **Fixed Player Identity**: Hardcoded the player driver to **Charles Leclerc** in the backend simulation.
 - **Smooth Timing Tower Animations**: Drivers now move between ranks with a **smooth 500ms sliding animation** in the Live Timing tower.
 
-![Fixed Driver and Smooth Animations](./media/verify_driver_animations_1774165760114.webp)
+![Fixed Driver and Smooth Animations](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/verify_driver_animations_1774165760114.webp)
 
 ### 5. Strategy & Feedback Fixes
 - **Tire Mapping Fix**: Fixed a bug where full tire names (e.g. "Intermediate") from the UI weren't recognized by the backend.
@@ -108,7 +108,7 @@ We finalized the user experience with several highly requested features:
   - **Independent Action**: You can now change your driving mode at any time without waiting for a race event (pit/overtake).
   - **Decoupled Decision Modal**: The Pit and Overtake modals no longer contain strategy buttons, keeping them focused on the immediate event.
 
-![Permanent Strategy Control Panel](./media/f1_strategy_control_panel_1774176708924.png)
+![Permanent Strategy Control Panel](/Users/allenxu/.gemini/antigravity/brain/1f4e651a-d8a3-4c18-81e5-1494b027a09d/f1_strategy_control_panel_1774176708924.png)
 - **Dynamic Overtake Boost**: Success in an overtake now grants an initial -0.5s lunge plus a 3-lap speed bonus. **Crucially, this benefit terminates immediately once the position change is complete** (player is ahead of the target), preventing unrealistic long-term gaps.
 - **Tire Cliff Rebalance**: Reduced the "performance cliff" penalty from 1.5s/lap to 0.7s/lap. This prevents the "5-second gap explosion" that occurred when AI drivers reached their tire limits.
 
@@ -120,14 +120,15 @@ We finalized the user experience with several highly requested features:
 - **DNF Crash Fix**: Fixed an `IndexError/ValueError` in `f1_sim.py` that occurred periodically when advancing laps. If the player crashed (DNF), the engine tried to access their position in the `active_drivers` list.
 
 ### 10. Project Deployment
-- [x] Publish Group Project as a GitHub Repo
-    - [x] Initialize git and configure `.gitignore`
-    - [x] Create comprehensive `README.md`
-    - [x] Push to remote repository
-- **Project Structure**: Organized into `f1_sim.py`/`app.py` (Backend) and `web_page_v1` (Frontend).
-- **README & Gitignore**: Added a detailed `README.md` with setup instructions and a `.gitignore` to exclude large/temporary files (`node_modules`, `.next`, `__pycache__`).
-- **Initial Commit**: Captured the current state of the "F1 Strategy Simulator: Team Principal Edition" as a first commit.
-- **GitHub Link**: The repository is now live at [https://github.com/allenxu9721224-lab/F1_simulation](https://github.com/allenxu9721224-lab/F1_simulation).
 
-### 10. Weather System Rebalance
-- **Rain Logic Overhaul**: Refined the rain progression to be more unpredictable. Each rain event now has a **50/50 chance** to be either "Light Rain" (stays in the Intermediate tire window, capping wetness at ~0.55) or "Heavy Rain" (progresses into Full Wet territory). This forces players to make real strategic guesses rather than blindly waiting for the "inevitable" Full Wet window.
+- **GitHub Repository**: [https://github.com/allenxu9721224-lab/F1_simulation](https://github.com/allenxu9721224-lab/F1_simulation)
+- **Project Structure**: Organized as a flattened Next.js project with `f1_sim.py`/`app.py` coexisting at the root for maximum compatibility with V0 and other AI tools.
+- **V0 Compatibility**: 
+    - [x] Flattened structure (no more sub-folders for package.json).
+    - [x] **Backend Fallback (Demo Mode)**: Automatically activates if the Python API is unreachable, allowing for a fully functional UI preview in cloud environments.
+    - [x] **Font Optimization**: Fixed `layout.tsx` to correctly inject pixel and system fonts.
+
+### 11. Weather & Physics Rebalance
+
+- **Rain Logic Overhaul**: Refined the rain progression to be more unpredictable. Each rain event now has a **50/50 chance** to be either "Light Rain" or "Heavy Rain".
+- **Mock Data**: Provides a full grid of 20 simulated drivers and radio logs for the Demo Mode.
