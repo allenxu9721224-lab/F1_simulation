@@ -1,26 +1,36 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { motion } from "framer-motion"
+import { useRef } from "react"
 
 interface Car {
   id: string
   name: string
   color: string
-  position: number // 0-1 representing position on track
+  position: number 
+  lapProgress: number 
+  gap: string 
   isPlayer: boolean
 }
 
 interface PixelTrackProps {
   cars: Car[]
   trackType?: string
+  isPaused?: boolean
 }
 
-export function PixelTrack({ cars, trackType = "monaco" }: PixelTrackProps) {
+export function PixelTrack({ cars, trackType = "monaco", isPaused = false }: PixelTrackProps) {
+  // Store the maximum progress seen for each car to prevent reverse animation (monotonic clamp)
+  const maxProgressRef = useRef<Record<string, number>>({})
+
   // Normalize track type to match filenames
   const normalizedType = trackType.charAt(0).toUpperCase() + trackType.slice(1).toLowerCase()
   
   // Track path points
   const trackPoints = getTrackPoints(trackType.toLowerCase())
+
+  // Clean the SVG path for CSS path() consumption (remove extra spaces/newlines)
+  const cleanPath = trackPoints.main.replace(/\s+/g, ' ').trim()
   
   return (
     <div className="relative w-full h-full bg-[#1a1a1a] rounded-lg overflow-hidden border-4 border-border/80 shadow-inner flex items-center justify-center">
@@ -64,7 +74,7 @@ export function PixelTrack({ cars, trackType = "monaco" }: PixelTrackProps) {
             imageRendering: "pixelated" 
           }}
         >
-        {/* Invisible Track Path (Used for cars to follow) */}
+        {/* Invisible Track Path (Used for reference or debug) */}
         <path
           d={trackPoints.main}
           fill="none"
@@ -72,7 +82,7 @@ export function PixelTrack({ cars, trackType = "monaco" }: PixelTrackProps) {
           strokeWidth="32"
         />
         
-        {/* Subtle Racing Line Overlay (Optional, low opacity) */}
+        {/* Subtle Racing Line Overlay */}
         <path
           d={trackPoints.main}
           fill="none"
@@ -90,47 +100,65 @@ export function PixelTrack({ cars, trackType = "monaco" }: PixelTrackProps) {
           <rect x="5" y="-2" width="5" height="2" fill="black" className="opacity-40" />
         </g>
         
-        {/* Cars */}
+        {/* Cars — using Absolute Distance + Closed Path for smooth infinite laps */}
         {cars.map((car) => {
-          const pos = getCarPosition(car.position, trackPoints.main)
+          // Monotonic Clamp: Ensure target never decreases for a given car ID.
+          // This keeps cars frozen in pits or during crashes while the leader advances.
+          const prevMax = maxProgressRef.current[car.id] || 0
+          const clampedProgress = Math.max(prevMax, car.lapProgress)
+          maxProgressRef.current[car.id] = clampedProgress
+          
           return (
-            <g key={car.id} transform={`translate(${pos.x}, ${pos.y})`}>
+            <motion.g
+              key={car.id}
+              style={{
+                offsetPath: `path('${cleanPath}')`,
+                offsetRotate: 'auto 90deg',
+              }}
+              animate={{
+                offsetDistance: `${clampedProgress * 100}%`,
+              }}
+              transition={{
+                duration: isPaused ? 0 : 3.0,
+                ease: "linear",
+              }}
+            >
               {/* Car shadow */}
-              <ellipse cx="2" cy="2" rx="6" ry="3" fill="rgba(0,0,0,0.5)" />
+              <ellipse cx="1" cy="1" rx="4" ry="2" fill="rgba(0,0,0,0.5)" />
               
               {/* Car body (pixel style) */}
-              <rect x="-5" y="-3" width="10" height="6" fill={car.color} rx="1" />
-              <rect x="-2" y="-2" width="4" height="4" fill="rgba(255,255,255,0.3)" rx="0.5" />
+              <rect x="-3" y="-2" width="6" height="4" fill={car.color} rx="0.5" />
+              <rect x="-1" y="-1.5" width="2" height="3" fill="rgba(255,255,255,0.3)" rx="0.2" />
               
               {/* Player highlight ring */}
               {car.isPlayer && (
                 <circle 
                   cx="0" 
                   cy="0" 
-                  r="10" 
+                  r="7" 
                   fill="none" 
                   stroke="#DC0000"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   className="animate-ping"
                   style={{ animationDuration: "1.5s" }}
                 />
               )}
               
-              {/* Driver name (only for player) */}
+              {/* Driver name */}
               {car.isPlayer && (
                 <text
                   x="0"
-                  y="-10"
+                  y="-8"
                   textAnchor="middle"
                   fill="#DC0000"
-                  fontSize="7"
+                  fontSize="5"
                   fontWeight="bold"
                   style={{ fontFamily: "var(--font-pixel)", textShadow: "0 0 4px black" }}
                 >
                   {car.name}
                 </text>
               )}
-            </g>
+            </motion.g>
           )
         })}
       </svg>
@@ -154,7 +182,7 @@ function getTrackPoints(type: string) {
         L 340 135
         Q 370 135 370 150
         Q 370 169 340 169
-        L 290 169
+        Z
       `,
       startLine: { x: 290, y: 169, rotation: 0 }
     },
@@ -179,7 +207,7 @@ function getTrackPoints(type: string) {
         L 320 161
         Q 350 165 350 184
         Q 350 202 320 202
-        L 180 202
+        Z
       `,
       startLine: { x: 180, y: 202, rotation: 0 }
     },
@@ -202,7 +230,7 @@ function getTrackPoints(type: string) {
         L 330 150
         Q 330 172 300 172
         L 250 172
-        Q 220 172 180 187
+        Z
       `,
       startLine: { x: 180, y: 187, rotation: -20 }
     },
@@ -224,7 +252,7 @@ function getTrackPoints(type: string) {
         L 260 135
         L 265 161
         L 335 161
-        L 342 112
+        Z
       `,
       startLine: { x: 342, y: 112, rotation: -80 }
     },
@@ -243,7 +271,7 @@ function getTrackPoints(type: string) {
         Q 330 220 310 190
         L 210 100
         Q 180 80 140 120
-        L 120 150
+        Z
       `,
       startLine: { x: 90, y: 175, rotation: -20 }
     },
@@ -262,73 +290,10 @@ function getTrackPoints(type: string) {
         Q 310 20 350 50
         L 370 100
         Q 380 150 340 180
-        L 310 160
+        Z
       `,
       startLine: { x: 280, y: 160, rotation: 0 }
     }
   }
   return tracks[type] || tracks.monza
-}
-
-function getCarPosition(progress: number, pathData: string): { x: number; y: number } {
-  // Parse M, L, Q commands from the SVG path
-  const points: { x: number; y: number }[] = []
-  const commands = pathData.trim().split(/\s+(?=[MLQZ])/i)
-  
-  let currentPos = { x: 0, y: 0 }
-  
-  for (const cmd of commands) {
-    if (!cmd.trim()) continue
-    const type = cmd[0].toUpperCase()
-    const args = cmd.slice(1).trim().split(/[\s,]+/).map(Number)
-    
-    if (type === 'M' || type === 'L') {
-      currentPos = { x: args[0], y: args[1] }
-      points.push({ ...currentPos })
-    } else if (type === 'Q') {
-      // Approximate quadratic bezier with 5 segments
-      const cp = { x: args[0], y: args[1] }
-      const endPos = { x: args[2], y: args[3] }
-      for (let t = 0.2; t <= 1; t += 0.2) {
-        const x = Math.pow(1 - t, 2) * currentPos.x + 2 * (1 - t) * t * cp.x + t * t * endPos.x
-        const y = Math.pow(1 - t, 2) * currentPos.y + 2 * (1 - t) * t * cp.y + t * t * endPos.y
-        points.push({ x, y })
-      }
-      currentPos = endPos
-    } else if (type === 'Z') {
-      if (points.length > 0) {
-        points.push({ ...points[0] })
-      }
-    }
-  }
-
-  // Calculate total length and segment lengths
-  let totalLength = 0
-  const lengths = [0]
-  for (let i = 1; i < points.length; i++) {
-    const dx = points[i].x - points[i - 1].x
-    const dy = points[i].y - points[i - 1].y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    totalLength += dist
-    lengths.push(totalLength)
-  }
-
-  // Find exact position along the path
-  const targetLength = progress * totalLength
-  let segmentIndex = lengths.findIndex(l => l >= targetLength)
-  
-  if (segmentIndex <= 0) return points[0] || { x: 0, y: 0 }
-  if (segmentIndex >= points.length) return points[points.length - 1]
-
-  const prevLength = lengths[segmentIndex - 1]
-  const segmentLength = lengths[segmentIndex] - prevLength
-  const segmentProgress = segmentLength === 0 ? 0 : (targetLength - prevLength) / segmentLength
-
-  const prevPoint = points[segmentIndex - 1]
-  const nextPoint = points[segmentIndex]
-
-  return {
-    x: prevPoint.x + (nextPoint.x - prevPoint.x) * segmentProgress,
-    y: prevPoint.y + (nextPoint.y - prevPoint.y) * segmentProgress,
-  }
 }

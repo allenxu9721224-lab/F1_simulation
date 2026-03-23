@@ -25,8 +25,6 @@ class DecisionInput(BaseModel):
     action: str
     tire: Optional[str] = None
 
-class StrategyInput(BaseModel):
-    action: str
 
 @app.post("/api/start")
 def start_game():
@@ -67,15 +65,31 @@ def advance_lap():
     
     leaderboard = []
     leader_time = active[0].total_time if active else 0.0
+    current_lap = game_session.current_lap
+    
+    # Estimate base lap time for gap-to-progress conversion
+    # Use the player's base_alt as a reasonable approximation
+    base_lap_time = game_session.player.base_alt if game_session.player else 90.0
     
     for i, d in enumerate(game_session.drivers):
         if d.status == "Racing":
             gap = "Leader" if d == active[0] else f"+{(d.total_time - leader_time):.1f}s"
-            # We must map current active positions
             pos = active.index(d) + 1
+            
+            # Accumulated lap_progress: leader is at (current_lap - 1) + 0.5 (mid-lap)
+            # Other drivers are offset backwards based on their gap in seconds
+            gap_seconds = d.total_time - leader_time
+            leader_progress = (current_lap - 1) + 0.5
+            gap_as_laps = gap_seconds / base_lap_time if base_lap_time > 0 else 0
+            lap_progress = max(0.0, leader_progress - gap_as_laps)
         else:
             gap = "OUT"
             pos = 99
+            # DNF: freeze at last known position
+            lap_progress = getattr(d, '_last_lap_progress', 0.0)
+            
+        # Store for DNF freeze
+        d._last_lap_progress = lap_progress
             
         leaderboard.append({
             "name": d.name,
@@ -83,7 +97,8 @@ def advance_lap():
             "tire": {"Soft":"S", "Medium":"M", "Hard":"H", "Intermediate":"I", "Wet":"W"}.get(d.current_tire, d.current_tire[0]),
             "gap": gap,
             "isPlayer": getattr(d, 'is_player', False),
-            "position": pos
+            "position": pos,
+            "lapProgress": round(lap_progress, 4)
         })
 
     # Ensure leaderboard is sorted by position
@@ -104,8 +119,6 @@ def advance_lap():
         "decision_prompts": getattr(game_session, "decision_prompts", []),
         "race_finished": game_session.lap_phase == "finished",
         "player_dnf": player_dnf,
-        "push_mode": game_session.player.push_mode,
-        "strategy_cooldown": game_session.player.strategy_cooldown,
         "final_results": getattr(game_session, "final_results", [])
     }
 
@@ -117,16 +130,3 @@ def submit_decision(decision: DecisionInput):
     
     game_session.apply_decision(decision.action, decision.tire)
     return {"status": "decision_applied"}
-
-@app.post("/api/strategy")
-def submit_strategy(strategy: StrategyInput):
-    global game_session
-    if not game_session:
-        return {"error": "Game not started"}
-    
-    game_session.apply_strategy_change(strategy.action)
-    return {
-        "status": "strategy_updated",
-        "push_mode": game_session.player.push_mode,
-        "strategy_cooldown": game_session.player.strategy_cooldown
-    }

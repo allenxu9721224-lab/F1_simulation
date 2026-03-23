@@ -292,13 +292,10 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
   const [isDemoMode, setIsDemoMode] = useState(false)
   const [showDecision, setShowDecision] = useState(false)
   const [decisionType, setDecisionType] = useState<"pit" | "overtake">("pit")
-  const [strategyCooldown, setStrategyCooldown] = useState(0)
-  const [isUpdatingStrategy, setIsUpdatingStrategy] = useState(false)
   const [decisionPrompts, setDecisionPrompts] = useState<string[]>([])
   
   const [raceFinished, setRaceFinished] = useState(false)
   const [finalResults, setFinalResults] = useState<FinalResult[]>([])
-  const [pushMode, setPushMode] = useState(1.0)
 
   const endRadioRef = useRef<HTMLDivElement>(null)
 
@@ -427,14 +424,10 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
       } else {
         if (data.current_lap) {
           setCurrentLap(data.current_lap)
-          if (data.push_mode !== undefined) setPushMode(data.push_mode)
-          setDrivers(prev => data.leaderboard.map((apiDriver: any) => {
-              const old = prev.find(d => d.name === apiDriver.name)
-              return {
-                  ...apiDriver,
-                  trackPosition: old ? (old.trackPosition + 0.033) % 1 : 1 - ((apiDriver.position - 1) * 0.05)
-              }
-          }))
+          setDrivers(data.leaderboard.map((apiDriver: any) => ({
+              ...apiDriver,
+              trackPosition: apiDriver.lapProgress ?? 0
+          })))
           
           if (data.radio_messages?.length > 0) {
              const newLogs = data.radio_messages.map((rawMsg: any) => ({
@@ -464,22 +457,12 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
     if (!isAutoPlaying) return;
     const interval = setInterval(() => {
         nextLap()
-    }, 1500)
+    }, 3000)
     return () => clearInterval(interval)
   }, [isAutoPlaying, nextLap])
 
-  // Fake smooth car movement between lap jumps
-  useEffect(() => {
-    if (raceFinished) return
-    if (!isAutoPlaying && !showDecision) return
-    const interval = setInterval(() => {
-      setDrivers(prev => prev.map(d => ({
-        ...d,
-        trackPosition: (d.trackPosition + 0.003 + (d.position === 1 ? 0.001 : 0)) % 1
-      })))
-    }, 100)
-    return () => clearInterval(interval)
-  }, [isAutoPlaying, showDecision, raceFinished])
+  // Car positions are now driven by backend lapProgress (accumulated float)
+  // CSS transitions in pixel-track.tsx handle smooth interpolation between API polls
 
   // Auto-scroll radio feed
   useEffect(() => {
@@ -501,36 +484,13 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
     }
   }
 
-  const submitStrategyChange = async (action: string) => {
-    if (strategyCooldown > 0 || isUpdatingStrategy) return
-    setIsUpdatingStrategy(true)
-    try {
-      const res = await fetch(`${API_URL}/api/strategy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
-      })
-      const data = await res.json()
-      if (data.push_mode) {
-        const m = data.push_mode
-        setPushMode(m < 1.0 ? 0.997 : m > 1.0 ? 1.006 : 1.0)
-      }
-      if (typeof data.strategy_cooldown === 'number') {
-        setStrategyCooldown(data.strategy_cooldown)
-      }
-      
-    } catch (e) {
-      console.error("Strategy update failed", e)
-    } finally {
-      setIsUpdatingStrategy(false)
-    }
-  }
-
-  const cars = drivers.slice(0, 10).map(d => ({
+  const cars = drivers.map(d => ({
     id: d.name,
     name: d.name,
     color: teamColors[d.team] || "#888",
     position: d.trackPosition,
+    lapProgress: d.trackPosition,
+    gap: d.gap,
     isPlayer: d.isPlayer
   }))
 
@@ -846,54 +806,6 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
               </div>
             ))}
           </div>
-
-          {/* Permanent Strategy Controls */}
-          <div className="p-3 border-t border-border bg-card/80">
-            <h3 className="text-[9px] text-muted-foreground font-pixel mb-2 tracking-widest uppercase flex justify-between items-center">
-              STRATEGY CONTROL
-              {strategyCooldown > 0 && <span className="text-primary animate-pulse">LOCKED</span>}
-            </h3>
-            <div className="grid grid-cols-3 gap-1.5">
-              <button 
-                onClick={() => submitStrategyChange("push")}
-                disabled={strategyCooldown > 0 || isUpdatingStrategy}
-                className={`py-2 text-[8px] font-bold rounded transition-all ${
-                  strategyCooldown > 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'hover:scale-105'
-                } ${
-                  pushMode < 1.0 ? 'bg-red-600 text-white ring-1 ring-red-400' : 'bg-red-950/40 text-red-500 hover:bg-red-900/60'
-                }`}
-                style={{ fontFamily: "var(--font-pixel)" }}>
-                PUSH
-              </button>
-              <button 
-                onClick={() => submitStrategyChange("neutral")}
-                disabled={strategyCooldown > 0 || isUpdatingStrategy}
-                className={`py-2 text-[8px] font-bold rounded transition-all ${
-                  strategyCooldown > 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'hover:scale-105'
-                } ${
-                  pushMode === 1.0 ? 'bg-gray-500 text-white ring-1 ring-gray-400' : 'bg-gray-900/40 text-gray-400 hover:bg-gray-800/60'
-                }`}
-                style={{ fontFamily: "var(--font-pixel)" }}>
-                STD
-              </button>
-              <button 
-                onClick={() => submitStrategyChange("defend")}
-                disabled={strategyCooldown > 0 || isUpdatingStrategy}
-                className={`py-2 text-[8px] font-bold rounded transition-all ${
-                  strategyCooldown > 0 ? 'opacity-30 grayscale cursor-not-allowed' : 'hover:scale-105'
-                } ${
-                  pushMode > 1.0 ? 'bg-blue-600 text-white ring-1 ring-blue-400' : 'bg-blue-950/40 text-blue-500 hover:bg-blue-900/60'
-                }`}
-                style={{ fontFamily: "var(--font-pixel)" }}>
-                DEFEND
-              </button>
-            </div>
-            {strategyCooldown > 0 && (
-              <p className="text-[7px] text-muted-foreground mt-1 text-center font-pixel opacity-50">
-                LOCKED FOR NEXT {strategyCooldown} LAP(S)
-              </p>
-            )}
-          </div>
         </aside>
 
         {/* Center - Pixel Track */}
@@ -902,6 +814,7 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
             <PixelTrack 
               cars={cars} 
               trackType={track.id} 
+              isPaused={showDecision}
             />
             
             {/* Radio Feed Overlay */}
@@ -1025,35 +938,7 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
                 </>
               )}
 
-              {/* Driving Mode */}
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-border" />
-                <span className="flex-shrink-0 mx-3 text-muted-foreground text-[10px] uppercase">DRIVING MODE</span>
-                <div className="flex-grow border-t border-border" />
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => setPushMode(0.95)}
-                  className={`py-2.5 text-[10px] font-bold rounded transition-all hover:scale-105 ${
-                    pushMode < 1.0 ? 'bg-red-600 text-white ring-2 ring-red-400' : 'bg-red-600/30 text-red-400 hover:bg-red-600/50'
-                  }`}
-                  style={{ fontFamily: "var(--font-pixel)" }}>
-                  🔥 PUSH
-                </button>
-                <button onClick={() => setPushMode(1.0)}
-                  className={`py-2.5 text-[10px] font-bold rounded transition-all hover:scale-105 ${
-                    pushMode === 1.0 ? 'bg-gray-500 text-white ring-2 ring-gray-400' : 'bg-gray-500/30 text-gray-400 hover:bg-gray-500/50'
-                  }`}
-                  style={{ fontFamily: "var(--font-pixel)" }}>
-                  ⚖️ STD
-                </button>
-                <button onClick={() => setPushMode(1.05)}
-                  className={`py-2.5 text-[10px] font-bold rounded transition-all hover:scale-105 ${
-                    pushMode > 1.0 ? 'bg-blue-600 text-white ring-2 ring-blue-400' : 'bg-blue-600/30 text-blue-400 hover:bg-blue-600/50'
-                  }`}
-                  style={{ fontFamily: "var(--font-pixel)" }}>
-                  🛡️ DEFEND
-                </button>
-              </div>
+
             </div>
           )}
         </aside>

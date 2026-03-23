@@ -29,6 +29,8 @@ class Driver:
         self.overtake_boost_laps = 0
         self.overtake_target_name = None
         self.strategy_cooldown = 0
+        self.stay_out_count = 0 # New: for silencing rain prompts
+        self.tire_prompt_cooldown = 0 # New: for silencing rain prompts
     def execute_pit(self, new_tire: str, is_sc: bool):
         loss = 12.0 if is_sc else 21.0
         loss += self.pit_skill + random.uniform(-0.5, 0.5)
@@ -44,7 +46,7 @@ class Driver:
         if self.status == "DNF": return False
         
         base = self.base_alt - (lap * 0.05)
-        base *= self.push_mode 
+        # Strategy push_mode removed as per request
         
         # 动态获取轮胎磨损率与悬崖 (针对天气调整)
         deg_rates = {"Soft": 0.12, "Medium": 0.06, "Hard": 0.02, "Intermediate": 0.08, "Wet": 0.05}
@@ -358,6 +360,10 @@ class F1Game:
         # If we have pit-related prompts, prioritize them and don't trigger overtake
         if need_prompt and self.player.tire_prompt_cooldown <= 0:
             return True, prompt_reasons, "pit"
+
+        # Decrement prompt cooldown
+        if self.player.tire_prompt_cooldown > 0:
+            self.player.tire_prompt_cooldown -= 1
             
         # Overtake logic (gap <= 1.0s and positive)
         if 0.1 <= gap_front <= 1.0 and self.player.overtake_cooldown <= 0 and idx > 0:
@@ -369,10 +375,6 @@ class F1Game:
     def advance_lap(self):
         self.output_buffer = [] # Clear buffer for this tick
         
-        # Always progress strategy cooldown at the start of any tick
-        if self.player.strategy_cooldown > 0:
-            self.player.strategy_cooldown -= 1
-            
         if self.current_lap > self.total_laps:
             if self.lap_phase != "finished":
                 self.print_results()
@@ -393,10 +395,6 @@ class F1Game:
                 self.decision_type = dtype
                 if dtype == "pit":
                     self.last_prompt_reasons = reasons
-                for r in reasons: self.log(f"🔔 {r}", "strategy")
-                self.lap_phase = "waiting_decision"
-                return
-            else:
                 self.lap_phase = "process"
                 
         if self.lap_phase == "process":
@@ -511,9 +509,19 @@ class F1Game:
             self.player.total_time += loss
             self.player.current_tire = mapped
             self.player.tire_age = 0
+            self.player.stay_out_count = 0 # Reset count if they box
+            self.player.tire_prompt_cooldown = 0 
             if mapped in ["Soft", "Medium", "Hard"]:
                 self.player.used_dry_compounds.add(mapped)
             self.log(f"🛠️ [换胎完成] 你换上了 {mapped} 胎，进站总耗时 {loss:.1f}s！", "strategy")
+        elif choice.lower() == "stay":
+            # Silence logic for wet-tire prompts
+            if self.is_wet_race or self.track_wetness >= 0.2:
+                self.player.stay_out_count += 1
+                if self.player.stay_out_count >= 3:
+                    self.player.tire_prompt_cooldown = 5
+                    self.player.stay_out_count = 0
+                    self.log("📻 [Engineer] 看来你很有信心。既然如此，接下来的5圈我们就先不吵你了。祝你好运！", "strategy")
         
         self.decision_required = False
         self.lap_phase = "process"
@@ -521,17 +529,8 @@ class F1Game:
         return
 
     def apply_strategy_change(self, action: str):
-        if action.lower() == "push":
-            self.player.push_mode = 0.997
-            self.log("📻 [Strategy] 指令确认：全进击模式！增加引擎出力。", "strategy")
-        elif action.lower() == "defend":
-            self.player.push_mode = 1.006
-            self.log("📻 [Strategy] 指令确认：防守模式。开始保护轮胎。", "strategy")
-        elif action.lower() == "neutral":
-            self.player.push_mode = 1.0
-            self.log("📻 [Strategy] 指令确认：恢复标准节奏。", "strategy")
-        
-        self.player.strategy_cooldown = 1 # 1 lap cooldown
+        # Removed as per user request to simplify game
+        pass
 
     def print_results(self):
         self.log("🏁 冲线！比赛结束！(FINAL CLASSIFICATION) 🏁", "critical")
