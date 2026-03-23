@@ -152,9 +152,8 @@ class F1Game:
             with open(tracks_path, newline="", encoding="utf-8") as f:
                 tracks = list(csv.DictReader(f))
         except FileNotFoundError:
-            # Fallback if CSV is missing
             tracks = [
-                {"id": "monza", "name": "🇮🇹 蒙扎赛道 (Monza)", "description": "速度神殿，引擎消耗极大", "laps": "53", "base_rain_prob": "0.015"}
+                {"id": "monza", "name": "🇮🇹 蒙扎赛道 (Monza)", "description": "速度神殿，引擎消耗极大", "laps": "53", "base_rain_prob": "0.015", "base_lap_time": "83.5"}
             ]
 
         chosen = random.choice(tracks)
@@ -166,6 +165,7 @@ class F1Game:
         }
         self.total_laps = self.track_info["laps"]
         self.base_rain_prob = float(chosen.get("base_rain_prob", 0.015))
+        track_base_lap_time = float(chosen.get("base_lap_time", 83.5))
         
         self.weather_state = "Clear" 
         self.track_wetness = 0.0
@@ -176,21 +176,24 @@ class F1Game:
         self.last_prompt_reasons = []
         
         # ── Load drivers from CSV ──
+        # Dynamic ALT: driver_race_alt = track_base_lap_time * pace_modifier
         drivers_path = os.path.join(base_dir, "drivers.csv")
         try:
             with open(drivers_path, newline="", encoding="utf-8") as f:
                 rows = list(csv.DictReader(f))
         except FileNotFoundError:
             rows = [
-                {"name": "Leclerc", "team": "Ferrari", "base_alt": "74.1", "pit_skill": "2.3", "rain_ability": "0.8", "is_player": "True"}
+                {"name": "Leclerc", "team": "Ferrari", "pace_modifier": "0.996", "pit_skill": "2.3", "rain_ability": "0.8", "is_player": "True"}
             ]
 
         self.drivers = []
         for row in rows:
+            pace_mod = float(row.get("pace_modifier", 1.0))
+            driver_race_alt = track_base_lap_time * pace_mod
             d = Driver(
                 name=row["name"],
                 team=row["team"],
-                base_alt=float(row["base_alt"]),
+                base_alt=driver_race_alt,
                 pit_skill=float(row["pit_skill"]),
                 rain_ability=float(row["rain_ability"]),
                 is_player=(row.get("is_player", "False").strip().lower() == "true")
@@ -203,7 +206,6 @@ class F1Game:
             if d.is_player:
                 self.player = d
                 break
-        # Fallback: if no player found in CSV, default to first driver
         if self.player is None and self.drivers:
             self.drivers[0].is_player = True
             self.player = self.drivers[0]

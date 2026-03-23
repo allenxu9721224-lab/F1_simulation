@@ -135,3 +135,10 @@ We finalized the user experience with several highly requested features:
 
 - **Rain Logic Overhaul**: Refined the rain progression to be more unpredictable. Each rain event now has a **50/50 chance** to be either "Light Rain" or "Heavy Rain".
 - **Mock Data**: Provides a full grid of 20 simulated drivers and radio logs for the Demo Mode.
+
+### 12. Data-Driven Performance (Dynamic ALT)
+- **CSV Migration**: Extracted all hardcoded driver and track data into `drivers.csv` and `tracks.csv`.
+- **Dynamic Lap Times**: Implemented a new performance model where a driver's lap time is calculated as `track_base_lap_time * driver_pace_modifier`.
+  - **Tracks**: Now include realistic 2024 race pace baselines (e.g., Spa 108s, Monza 83.5s).
+  - **Drivers**: Assigned 16+ drivers across three performance tiers (Top, Mid, Lower) using `pace_modifier` values (e.g., Verstappen 0.995).
+- **Realistic Scaling**: Performance gaps now automatically scale based on track length and characteristics, eliminating the previous "one size fits all" 74s lap time.

@@ -1,7 +1,7 @@
-id,name,description,laps,base_rain_prob
-monza,🇮🇹 蒙扎赛道 (Monza),速度神殿，引擎消耗极大,53,0.015
-spa,🇧🇪 斯帕赛道 (Spa-Francorchamps),微气候复杂，极易出现局部阵雨,44,0.025
-suzuka,🇯🇵 铃鹿赛道 (Suzuka),8字型高速弯，极其考验轮胎管理,53,0.012
-silverstone,🇬🇧 银石赛道 (Silverstone),高速弯为主，考验空气动力学,52,0.030
-shanghai,🇨🇳 上海国际赛车场 (Shanghai),蜗牛弯经典，刹车点极其关键,56,0.018
-singapore,🇸🇬 新加坡街道赛 (Singapore),暗夜街道赛，体力与专注力的极限,62,0.020
+id,name,description,laps,base_rain_prob,base_lap_time
+monza,🇮🇹 蒙扎赛道 (Monza),速度神殿，引擎消耗极大,53,0.015,83.5
+spa,🇧🇪 斯帕赛道 (Spa-Francorchamps),微气候复杂，极易出现局部阵雨,44,0.025,108.0
+suzuka,🇯🇵 铃鹿赛道 (Suzuka),8字型高速弯，极其考验轮胎管理,53,0.012,93.0
+silverstone,🇬🇧 银石赛道 (Silverstone),高速弯为主，考验空气动力学,52,0.030,90.0
+shanghai,🇨🇳 上海国际赛车场 (Shanghai),蜗牛弯经典，刹车点极其关键,56,0.018,97.0
+singapore,🇸🇬 新加坡街道赛 (Singapore),暗夜街道赛，体力与专注力的极限,62,0.020,97.5

@@ -44,3 +44,11 @@
 - [x] Redesign the decision modal to be a non-blocking sidebar to keep track info visible.
 - [x] Implement a results visualization dashboard with final classification data.
 - [x] Add a "Back to Start" button on the results screen.
+
+## Phase 5: Data-Driven Refactor (CSV & Dynamic ALT)
+- [x] Create `drivers.csv` and `tracks.csv`
+- [x] Extract 16+ drivers and 6 tracks from hardcoded logic
+- [x] Implement `base_lap_time` for tracks (Silverstone/Shanghai/Singapore verified)
+- [x] Implement `pace_modifier` for drivers (3 performance tiers)
+- [x] Update `F1Game` to calculate `driver_race_alt` dynamically
+- [x] Verify lap time scaling across different tracks
