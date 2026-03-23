@@ -10,11 +10,11 @@ This document provides a technical overview of the current state of the F1 Strat
 ├── f1_sim.py               # Core Game Engine (State Machine)
 ├── drivers.csv             # Data-driven Driver Roster
 ├── tracks.csv              # Data-driven Track Database
-├── package.json            # Node.js dependencies (Next.js 15.1.11)
+├── package.json            # Node.js dependencies (Next.js 15.1.11, Framer Motion)
 ├── components/
 │   └── f1/
-│       ├── broadcast-screen.tsx  # Main Race UI & Auto-Play Logic
-│       ├── pixel-track.tsx       # Motion Path Animation & Car Rendering
+│       ├── broadcast-screen.tsx  # Main Race UI & Auto-Play Logic (3s heartbeat)
+│       ├── pixel-track.tsx       # Framer Motion JS Tweening & Car Rendering
 │       └── ...                   # UI Components (Leaderboard, Radio, etc.)
 ├── app/
 │   ├── layout.tsx          # Root Layout (Fonts & Metadata)
@@ -48,46 +48,38 @@ spa,🇧🇪 斯帕赛道 (Spa-Francorchamps),多雨微气候,44,0.025,108.0
 ### Engine Logic: State Machine & Interruption
 - **Deterministic Step-based Physics**: `advance_lap()` calculates physics for 20 drivers.
 - **Decision Interrupts**: The engine checks for critical events (Weather, Tyre Cliff, SC) *before* processing a lap. If `decision_required` is True, simulation halts.
-- **Smart Silence Logic**: If a player selects "Stay Out" 3+ times during wet weather prompts, the engine triggers a **5-lap silence period** (`tire_prompt_cooldown`) to avoid "spamming" the user.
-
-### API Contract (Simplified)
-- `POST /api/advance`: Main heartbeat. Advances simulation.
-- `POST /api/decision`: Submits "Box" or "Stay Out" choices.
-- `POST /api/start`: Manual/Remote reset of the game session.
+- **Smart Silence Logic**: If a player selects "Stay Out" 3+ times during wet weather prompts, the engine triggers a **5-lap silence period** (`tire_prompt_cooldown`) to avoids pestering.
+- **Monotonic Safety**: The engine ensures `lap_progress` only increases (except for player-visible data where "clamping" is handled in frontend).
 
 ---
 
-## 3. Frontend Architecture (Autonomous Movement)
+## 3. Frontend Architecture (Precision Animation)
 
-### Visual Decoupling (Motion Path)
-Unlike typical simulators where UI polls for every pixel move, this project uses **Autonomous CSS Loops**:
-- **8s Continuous Loop**: Each car is assigned a CSS `offset-path` (SVG) and animates from 0% to 100% over 8 seconds.
-- **Accumulated Distance**: The backend returns `lapProgress` (e.g., `13.5` for someone halfway through Lap 14).
-- **Dynamic Delay**: Cars maintain relative spacing via `animation-delay: -((lapProgress % 1) * 8000)ms`.
+### Visual Paradigm: Absolute Distance + Closed Path
+We transitioned from discrete CSS loops to **Continuous JS Tweening** via `framer-motion`:
+- **Closed SVG Loops**: All track paths end with the `Z` command. This makes them mathematically circular, allowing `offset-distance` to wrap around.
+- **Absolute Distance**: Car position is set to `clampedProgress * 100%`. For example, $120.5\%$ automatically renders at $20.5\%$ on Lap 2, maintaining perfect tween continuity.
+- **Monotonic Clamp (Ratchet)**: A `useRef` based ratchet ensure cars NEVER move backwards, even if their data-driven progress drops during a multi-lap pit stop.
 
-### Interactive Pausing
-- The `PixelTrack` component receives an `isPaused` prop (linked to `showDecision`).
-- Animation is paused via `animation-play-state: paused` to ensure the cars "freeze" in place while the user makes a pit/DRS decision.
+### Interactive Pausing & Pace
+- **Broadcast Heartbeat**: The system polls every **3000ms**.
+- **Synced Transitions**: Framer Motion tweens the position over exactly **3.0s**, ensuring the cars move continuously without snapping at poll intervals.
+- **State-Driven Pausing**: When `isPaused` (Decision Mode), the car's transition duration drops to 0, freezing them instantly.
 
 ---
 
 ## 4. Critical Code Snippets
 
-### 1. Autonomous Movement Calculation (`pixel-track.tsx`)
+### 1. Absolute Tweening & Ratchet (`pixel-track.tsx`)
 ```typescript
-const animDuration = 8000; // 8 seconds per visible lap
-const progressDecimal = car.lapProgress % 1;
-const delay = -(progressDecimal * animDuration);
+const prevMax = maxProgressRef.current[car.id] || 0;
+const clampedProgress = Math.max(prevMax, car.lapProgress);
+maxProgressRef.current[car.id] = clampedProgress;
 
 return (
-  <div 
-    key={car.id}
-    style={{
-      offsetPath: `path('${SVG_PATHS[trackType]}')`,
-      animation: `driveCircuit ${animDuration}ms linear infinite`,
-      animationDelay: `${delay}ms`,
-      animationPlayState: isPaused ? 'paused' : 'running'
-    }}
+  <motion.g
+    animate={{ offsetDistance: `${clampedProgress * 100}%` }}
+    transition={{ duration: isPaused ? 0 : 3.0, ease: "linear" }}
   />
 );
 ```
@@ -95,16 +87,12 @@ return (
 ### 2. Smart Pit Silence Logic (`f1_sim.py`)
 ```python
 def check_player_decision(self, active, weather_msg):
-    # Skip pestering if silenced
+    # Skip pestering if silenced by 3 consecutive "stay outs"
     if need_prompt and self.player.tire_prompt_cooldown <= 0:
         return True, prompt_reasons, "pit"
 
     if self.player.tire_prompt_cooldown > 0:
         self.player.tire_prompt_cooldown -= 1
-        
-    # Overtake logic remains always active
-    if 0.1 <= gap_front <= 1.0 and self.player.overtake_cooldown <= 0:
-        return True, ["...overtake..."], "overtake"
 ```
 
 ---
@@ -112,12 +100,12 @@ def check_player_decision(self, active, weather_msg):
 ## 5. Implementation Status
 
 ### Completed ✅
-- **20-Car Grid**: Full field rendered with reduced-size pixel sprites.
-- **Buttery-Smooth Movement**: CSS Motion Path removes polling stuttering.
+- **20-Car Grid**: Full field rendered with high-fidelity pixel sprites.
+- **Zero-Jitter Movement**: Framer Motion + 3s Polling removes all stuttering.
+- **Infinite Laps**: Closed-loop SVG architecture supports unlimited race lengths.
 - **Strategy Simplification**: Focus shifted entirely to Pit/Overtake (Push/Std/Def removed).
-- **Audio/Radio Narrative**: Integrated team logs for immersion.
 
 ### Roadmap 🔍
-- **Safety Car Visuals**: Actual car entity for SC periods.
-- **Telemetry View**: Advanced data charts for tyre wear and fuel.
-- **Audio Overhaul**: Engine sound synthesis linked to lap progress.
+- **Safety Car Entity**: A visible safety car for track-neutralization periods.
+- **Telemetry Dashboard**: Dynamic charts for tyre thermal degradation.
+- **Live Sound Scape**: Audio synthesis for engine notes and pit lane noise.
