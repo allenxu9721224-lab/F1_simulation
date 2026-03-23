@@ -1,0 +1,17 @@
+name,team,base_alt,pit_skill,rain_ability,is_player
+Verstappen,Red Bull,74.0,2.1,0.6,False
+Hamilton,Ferrari,74.1,2.3,0.65,False
+Leclerc,Ferrari,74.1,2.3,0.8,True
+Norris,McLaren,74.2,2.2,0.8,False
+Piastri,McLaren,74.3,2.2,0.9,False
+Russell,Mercedes,74.3,2.4,0.95,False
+Sainz,Williams,74.5,2.6,0.85,False
+Alonso,Aston Martin,74.6,2.5,0.7,False
+Lawson,Red Bull,74.7,2.1,1.0,False
+Gasly,Alpine,74.9,2.7,0.9,False
+Albon,Williams,74.9,2.6,0.9,False
+Tsunoda,RB,75.0,2.5,1.1,False
+Stroll,Aston Martin,75.2,2.5,0.75,False
+Hulkenberg,Audi,75.3,2.8,1.0,False
+Antonelli,Mercedes,74.6,2.4,1.2,False
+Bortoleto,Audi,75.5,2.8,1.1,False

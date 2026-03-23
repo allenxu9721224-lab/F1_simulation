@@ -1,5 +1,7 @@
 import random
 import time
+import csv
+import os
 
 class Driver:
     def __init__(self, name: str, team: str, base_alt: float, pit_skill: float, rain_ability: float, is_player: bool = False):
@@ -143,48 +145,68 @@ class F1Game:
         self.decision_type = None
         self.decision_prompts = []
         
-        tracks = [
-            {"id": "monza", "name": "🇮🇹 蒙扎赛道 (Monza)", "desc": "速度神殿，引擎消耗极大", "laps": 53},
-            {"id": "spa", "name": "🇧🇪 斯帕赛道 (Spa-Francorchamps)", "desc": "微气候复杂，极易出现局部阵雨", "laps": 44},
-            {"id": "suzuka", "name": "🇯🇵 铃鹿赛道 (Suzuka)", "desc": "8字型高速弯，极其考验轮胎管理", "laps": 53}
-        ]
-        self.track_info = random.choice(tracks)
+        # ── Load tracks from CSV ──
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        tracks_path = os.path.join(base_dir, "tracks.csv")
+        try:
+            with open(tracks_path, newline="", encoding="utf-8") as f:
+                tracks = list(csv.DictReader(f))
+        except FileNotFoundError:
+            # Fallback if CSV is missing
+            tracks = [
+                {"id": "monza", "name": "🇮🇹 蒙扎赛道 (Monza)", "description": "速度神殿，引擎消耗极大", "laps": "53", "base_rain_prob": "0.015"}
+            ]
+
+        chosen = random.choice(tracks)
+        self.track_info = {
+            "id": chosen["id"],
+            "name": chosen["name"],
+            "desc": chosen["description"],
+            "laps": int(chosen["laps"])
+        }
         self.total_laps = self.track_info["laps"]
+        self.base_rain_prob = float(chosen.get("base_rain_prob", 0.015))
         
-        self.base_rain_prob = 0.015 
         self.weather_state = "Clear" 
         self.track_wetness = 0.0
         self.rain_countdown = 0
         self.rain_duration = 0
-        self.is_wet_race = False # 用于解除干胎规则限制
-        self.rain_type = "Light" # Light or Heavy
+        self.is_wet_race = False
+        self.rain_type = "Light"
         self.last_prompt_reasons = []
         
-        self.drivers = [
-            Driver("Verstappen", "Red Bull", 74.0, 2.1, 0.6), 
-            Driver("Hamilton", "Ferrari", 74.1, 2.3, 0.65), 
-            Driver("Leclerc", "Ferrari", 74.1, 2.3, 0.8), 
-            Driver("Norris", "McLaren", 74.2, 2.2, 0.8), 
-            Driver("Piastri", "McLaren", 74.3, 2.2, 0.9),
-            Driver("Russell", "Mercedes", 74.3, 2.4, 0.95),
-            Driver("Sainz", "Williams", 74.5, 2.6, 0.85), 
-            Driver("Alonso", "Aston Martin", 74.6, 2.5, 0.7), 
-            Driver("Lawson", "Red Bull", 74.7, 2.1, 1.0),
-            Driver("Gasly", "Alpine", 74.9, 2.7, 0.9),
-            Driver("Albon", "Williams", 74.9, 2.6, 0.9),
-            Driver("Tsunoda", "RB", 75.0, 2.5, 1.1), 
-            Driver("Stroll", "Aston Martin", 75.2, 2.5, 0.75), 
-            Driver("Hulkenberg", "Audi", 75.3, 2.8, 1.0),
-            Driver("Antonelli", "Mercedes", 74.6, 2.4, 1.2), 
-            Driver("Bortoleto", "Audi", 75.5, 2.8, 1.1)
-        ]
+        # ── Load drivers from CSV ──
+        drivers_path = os.path.join(base_dir, "drivers.csv")
+        try:
+            with open(drivers_path, newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+        except FileNotFoundError:
+            rows = [
+                {"name": "Leclerc", "team": "Ferrari", "base_alt": "74.1", "pit_skill": "2.3", "rain_ability": "0.8", "is_player": "True"}
+            ]
+
+        self.drivers = []
+        for row in rows:
+            d = Driver(
+                name=row["name"],
+                team=row["team"],
+                base_alt=float(row["base_alt"]),
+                pit_skill=float(row["pit_skill"]),
+                rain_ability=float(row["rain_ability"]),
+                is_player=(row.get("is_player", "False").strip().lower() == "true")
+            )
+            self.drivers.append(d)
         
-        player_name = "Leclerc"
+        # Assign player reference
+        self.player = None
         for d in self.drivers:
-            if d.name == player_name:
-                d.is_player = True
+            if d.is_player:
                 self.player = d
                 break
+        # Fallback: if no player found in CSV, default to first driver
+        if self.player is None and self.drivers:
+            self.drivers[0].is_player = True
+            self.player = self.drivers[0]
 
     def log(self, msg: str, type="normal"):
         self.output_buffer.append({"message": msg, "type": type})
