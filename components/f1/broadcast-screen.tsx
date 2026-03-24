@@ -76,7 +76,7 @@ const teamColors: Record<string, string> = {
   "Audi": "#F50000"
 }
 
-const API_URL = "http://127.0.0.1:8000"
+const API_URL = "http://localhost:8000"
 
 const MOCK_DRIVERS: Driver[] = [
   { position: 1, name: "Max Verstappen", team: "Red Bull", tire: "S", gap: "Leader", isPlayer: false, trackPosition: 1.0 },
@@ -297,56 +297,97 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
   const [raceFinished, setRaceFinished] = useState(false)
   const [finalResults, setFinalResults] = useState<FinalResult[]>([])
 
+  // Driver Selection State
+  const [availableDrivers, setAvailableDrivers] = useState<Array<{name: string, team: string}>>([])
+  const [selectedDriver, setSelectedDriver] = useState<string | null>(null)
+  const [showSelection, setShowSelection] = useState(true)
+
   const endRadioRef = useRef<HTMLDivElement>(null)
 
-  // Start game remotely on mount
+  // Fetch available drivers on mount
   useEffect(() => {
-    const startRemoteGame = async () => {
+    const fetchDrivers = async () => {
       try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 2000)
-        
-        const res = await fetch(`${API_URL}/api/start`, { 
-          method: "POST",
-          signal: controller.signal 
-        })
-        clearTimeout(timeoutId)
-        
+        const res = await fetch(`${API_URL}/api/drivers`)
         const data = await res.json()
-        if (data.status === "started") {
-          setTotalLaps(data.total_laps || track.laps)
-          setDrivers(data.leaderboard.map((d: any) => ({
-             ...d,
-             trackPosition: 1 - ((d.position - 1) * 0.05)
-          })))
-          setCurrentLap(1)
-          const logs = data.radio_messages.map((rawMsg: any) => ({
-             id: generateMessageId("msg"),
-             lap: 0,
-             type: rawMsg.type || "normal",
-             message: rawMsg.message,
-             timestamp: new Date().toLocaleTimeString("zh-CN")
-          }))
-          setRadioMessages(logs)
-          setIsAutoPlaying(true)
-        }
+        setAvailableDrivers(data.drivers || [])
       } catch (e) {
-        console.warn("Backend unreachable, entering DEMO MODE", e)
-        setIsDemoMode(true)
-        setDrivers(MOCK_DRIVERS)
-        setCurrentLap(1)
-        setRadioMessages([{
-          id: generateMessageId("msg"),
-          lap: 0,
-          type: "strategy",
-          message: "⚠️ 正在以 DEMO 模式运行 (未检测到后端 API)",
-          timestamp: new Date().toLocaleTimeString("zh-CN")
-        }])
-        setIsAutoPlaying(true)
+        console.error("Failed to fetch drivers", e)
       }
     }
-    startRemoteGame()
-  }, [track.laps])
+    fetchDrivers()
+  }, [])
+
+  const startRemoteGame = async (driverName: string) => {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 12000) // Extened timeout to 12s
+      
+      const res = await fetch(`${API_URL}/api/start`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          driver_name: driverName,
+          track_type: track.id 
+        }),
+        signal: controller.signal 
+      })
+      clearTimeout(timeoutId)
+      
+      const data = await res.json()
+      if (data.status === "started") {
+        setTotalLaps(data.total_laps || track.laps)
+        setDrivers(data.leaderboard.map((d: any) => ({
+           ...d,
+           trackPosition: 1 - ((d.position - 1) * 0.05)
+        })))
+        setCurrentLap(1)
+        const logs = data.radio_messages.map((rawMsg: any) => ({
+           id: generateMessageId("msg"),
+           lap: 0,
+           type: rawMsg.type || "normal",
+           message: rawMsg.message,
+           timestamp: new Date().toLocaleTimeString("zh-CN")
+        }))
+        setRadioMessages(logs)
+        setIsAutoPlaying(true)
+        setShowSelection(false)
+      } else if (data.status === "error") {
+        console.error("Backend Error:", data.message)
+        // Optionally show this to user, but for now log it and it will trigger Demo fallback catch
+        throw new Error(data.message)
+      } else {
+        console.error("Start failed:", data)
+      }
+    } catch (e) {
+      console.warn("Backend unreachable, entering DEMO MODE", e)
+      setIsDemoMode(true)
+      setDrivers(MOCK_DRIVERS)
+      setCurrentLap(1)
+      setRadioMessages([{
+        id: generateMessageId("msg"),
+        lap: 0,
+        type: "strategy",
+        message: "⚠️ 正在以 DEMO 模式运行 (未检测到后端 API)",
+        timestamp: new Date().toLocaleTimeString("zh-CN")
+      }])
+      setIsAutoPlaying(true)
+      setShowSelection(false)
+    }
+  }
+
+  // Filter drivers for selection
+  const filteredDrivers = availableDrivers.filter(d => 
+    d.team.toLowerCase() === team.name.toLowerCase() || 
+    d.team.toLowerCase().includes(team.name.toLowerCase()) ||
+    team.name.toLowerCase().includes(d.team.toLowerCase())
+  )
+
+  // Handle driver selection
+  const handleDriverSelect = (name: string) => {
+    setSelectedDriver(name)
+    startRemoteGame(name)
+  }
 
   const nextLap = useCallback(async () => {
     if (isDemoMode) {
@@ -384,6 +425,9 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
       if (data.error) {
          console.error(data.error)
          setIsAutoPlaying(false)
+         if (data.error === "Game not started") {
+           setShowSelection(true)
+         }
          return
       }
 
@@ -450,7 +494,7 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
     } catch (e) {
       console.error(e)
     }
-  }, [])
+  }, [isDemoMode, totalLaps, drivers, currentLap])
 
   // Auto-Play Loop
   useEffect(() => {
@@ -669,6 +713,125 @@ export function BroadcastScreen({ track, team, onExit }: BroadcastScreenProps) {
             </div>
           </aside>
         </div>
+      </div>
+    )
+  }
+
+  // ==================== DRIVER SELECTION SCREEN ====================
+  if (showSelection) {
+    return (
+      <div className="h-screen flex flex-col bg-background overflow-hidden relative font-sans">
+        {/* Carbon fiber background */}
+        <div 
+          className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{
+            backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)`
+          }}
+        />
+
+        {/* Scan line effect */}
+        <div className="absolute inset-0 pointer-events-none z-20 opacity-5 pointer-events-none"
+          style={{
+            background: `repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.4) 4px)`
+          }}
+        />
+
+        <header className="relative z-10 flex items-center justify-between px-8 py-6 border-b border-white/10 bg-black/40 backdrop-blur-md">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={onExit}
+              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-white border border-white/10 rounded-md transition-all hover:bg-white/5"
+              style={{ fontFamily: 'var(--font-pixel)' }}
+            >
+              ← EXIT
+            </button>
+            <div className="h-8 w-px bg-white/10" />
+            <div>
+              <h1 className="text-white text-2xl font-black tracking-tighter" style={{ fontFamily: 'var(--font-f1-black)' }}>
+                SELECT YOUR DRIVER
+              </h1>
+              <p className="text-primary text-[10px] font-bold tracking-[0.3em]" style={{ fontFamily: 'var(--font-pixel)' }}>
+                SEASON 2026 REGIONAL SERIES
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-muted-foreground font-bold" style={{ fontFamily: 'var(--font-pixel)' }}>TRACK</span>
+              <span className="text-white text-sm font-bold tracking-tight">{track.name.toUpperCase()}</span>
+            </div>
+            <img 
+              src={`/Tracks/${track.name}.png`} 
+              alt={track.name}
+              className="w-16 h-10 object-contain opacity-60 filter brightness-200"
+            />
+          </div>
+        </header>
+
+        <main className="relative z-10 flex-1 overflow-y-auto p-12">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {(filteredDrivers.length > 0 ? filteredDrivers : availableDrivers).map((d, i) => {
+              const teamColor = teamColors[d.team] || '#888'
+              return (
+                <div
+                  key={d.name}
+                  onClick={() => handleDriverSelect(d.name)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && handleDriverSelect(d.name)}
+                  className="group relative flex flex-col bg-card/40 border border-white/10 rounded-xl overflow-hidden transition-all hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(255,255,255,0.05)] hover:border-white/30 text-left cursor-pointer animate-in fade-in slide-in-from-bottom-4"
+                  style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}
+                >
+                  {/* Team Color Strip */}
+                  <div 
+                    className="h-1.5 w-full"
+                    style={{ backgroundColor: teamColor }}
+                  />
+                  
+                  <div className="p-5 flex flex-col h-full">
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-[10px] text-muted-foreground font-bold tracking-widest" style={{ fontFamily: 'var(--font-pixel)' }}>
+                        {d.team.toUpperCase()}
+                      </span>
+                      <div 
+                        className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]"
+                        style={{ color: teamColor, backgroundColor: 'currentColor' }}
+                      />
+                    </div>
+                    
+                    <div className="mt-auto">
+                      <div className="text-white text-lg font-black leading-tight tracking-tight">
+                        {d.name.split(' ').slice(0, -1).join(' ')}
+                      </div>
+                      <div className="text-white text-3xl font-black leading-none tracking-tighter" style={{ fontFamily: 'var(--font-f1-black)' }}>
+                        {d.name.split(' ').pop()?.toUpperCase()}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] text-primary font-bold tracking-widest" style={{ fontFamily: 'var(--font-pixel)' }}>
+                        SELECT TEAM
+                      </span>
+                      <span className="text-white">→</span>
+                    </div>
+                  </div>
+
+                  {/* Hover background glow */}
+                  <div 
+                    className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none"
+                    style={{ background: `radial-gradient(circle at center, ${teamColor}, transparent)` }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </main>
+
+        <footer className="relative z-10 px-8 py-6 border-t border-white/10 bg-black/20 text-center">
+          <p className="text-[10px] text-muted-foreground tracking-[0.5em] font-medium" style={{ fontFamily: 'var(--font-pixel)' }}>
+            READY TO RACE · AWAITING TEAM SELECTION
+          </p>
+        </footer>
       </div>
     )
   }

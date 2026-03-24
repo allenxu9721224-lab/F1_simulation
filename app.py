@@ -10,7 +10,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:1644", "http://127.0.0.1:1644"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,36 +21,61 @@ game_session = None
 
 from typing import Optional
 
+class StartGameRequest(BaseModel):
+    driver_name: Optional[str] = None
+    track_type: str = "monaco"
+
 class DecisionInput(BaseModel):
     action: str
     tire: Optional[str] = None
 
+@app.get("/api/drivers")
+def get_drivers():
+    drivers = []
+    if os.path.exists("drivers.csv"):
+        with open("drivers.csv", mode="r", encoding="utf-8") as f:
+            import csv
+            reader = csv.DictReader(f)
+            for row in reader:
+                drivers.append({
+                    "name": row["name"],
+                    "team": row["team"]
+                })
+    return {"drivers": drivers}
 
 @app.post("/api/start")
-def start_game():
+def start_game(req: StartGameRequest = None):
     global game_session
-    game_session = F1Game()
-    game_session.simulate_qualifying()
-    
-    leaderboard = []
-    for i, d in enumerate(game_session.drivers):
-        leaderboard.append({
-            "name": d.name,
-            "team": d.team,
-            "tire": {"Soft":"S", "Medium":"M", "Hard":"H", "Intermediate":"I", "Wet":"W"}.get(d.current_tire, d.current_tire[0]),
-            "gap": "Leader" if i == 0 else f"+{d.total_time - game_session.drivers[0].total_time:.1f}s",
-            "isPlayer": getattr(d, 'is_player', False),
-            "position": i + 1
-        })
+    try:
+        driver_name = req.driver_name if req else None
+        track_type = req.track_type if req else "monaco"
+        
+        game_session = F1Game(track_type=track_type, player_name=driver_name)
+        game_session.simulate_qualifying()
+        
+        leaderboard = []
+        for i, d in enumerate(game_session.drivers):
+            leaderboard.append({
+                "name": d.name,
+                "team": d.team,
+                "tire": {"Soft":"S", "Medium":"M", "Hard":"H", "Intermediate":"I", "Wet":"W"}.get(d.current_tire, d.current_tire[0]),
+                "gap": "Leader" if i == 0 else f"+{d.total_time - game_session.drivers[0].total_time:.1f}s",
+                "isPlayer": getattr(d, 'is_player', False),
+                "position": i + 1
+            })
 
-    return {
-        "status": "started",
-        "current_lap": game_session.current_lap,
-        "track_info": game_session.track_info,
-        "total_laps": game_session.total_laps,
-        "leaderboard": leaderboard,
-        "radio_messages": game_session.output_buffer
-    }
+        return {
+            "status": "started",
+            "current_lap": game_session.current_lap,
+            "track_info": game_session.track_info,
+            "total_laps": game_session.total_laps,
+            "leaderboard": leaderboard,
+            "radio_messages": game_session.output_buffer
+        }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/advance")
 def advance_lap():

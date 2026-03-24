@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { useRef } from "react"
+import { useRef, useState, useEffect, useMemo } from "react"
 
 interface Car {
   id: string
@@ -13,6 +13,14 @@ interface Car {
   isPlayer: boolean
 }
 
+interface TrackConfig {
+  main: string
+  viewBox: string
+  startLine: { x: number; y: number; rotation: number }
+  offsetX?: number
+  offsetY?: number
+}
+
 interface PixelTrackProps {
   cars: Car[]
   trackType?: string
@@ -20,34 +28,123 @@ interface PixelTrackProps {
 }
 
 export function PixelTrack({ cars, trackType = "monaco", isPaused = false }: PixelTrackProps) {
+  const [dynamicConfig, setDynamicConfig] = useState<TrackConfig | null>(null)
+  
   // Store the maximum progress seen for each car to prevent reverse animation (monotonic clamp)
   const maxProgressRef = useRef<Record<string, number>>({})
 
   // Normalize track type to match filenames
   const normalizedType = trackType.charAt(0).toUpperCase() + trackType.slice(1).toLowerCase()
   
-  // Track path points
-  const trackPoints = getTrackPoints(trackType.toLowerCase())
+  // 1. Try to load dynamic SVG from /public/Tracks/[TrackID].svg
+  useEffect(() => {
+    async function loadTrack() {
+      try {
+        const response = await fetch(`/Tracks/${normalizedType}.svg`)
+        if (!response.ok) throw new Error("SVG not found")
+        const svgText = await response.text()
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(svgText, "image/svg+xml")
+        const svgEl = doc.querySelector("svg")
+        const pathEl = doc.querySelector("path")
+        const lineEl = doc.querySelector("line")
+        
+        if (!svgEl || !pathEl) throw new Error("Invalid SVG structure")
+        
+        const mainPath = pathEl.getAttribute("d") || ""
+        
+        // Parsing the path string to find its bounding box (approximate)
+        const coords = mainPath.match(/[-+]?[0-9]*\.?[0-9]+/g)?.map(Number) || []
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+        for (let i = 0; i < coords.length; i += 2) {
+           if (coords[i] < minX) minX = coords[i]
+           if (coords[i] > maxX) maxX = coords[i]
+           if (coords[i+1] < minY) minY = coords[i+1]
+           if (coords[i+1] > maxY) maxY = coords[i+1]
+        }
+        
+        // Centering logic: If the path is tight-cropped, its center should align with the background's center (2736/2, 1536/2)
+        const pathCenterX = (minX + maxX) / 2
+        const pathCenterY = (minY + maxY) / 2
+        const canvasCenterX = 2736 / 2
+        const canvasCenterY = 1536 / 2
+        
+        // Best guess offset: nudge the path to center of raw canvas
+        const autoOffsetX = canvasCenterX - pathCenterX
+        const autoOffsetY = canvasCenterY - pathCenterY
+
+        console.log(`Auto Alignment [${normalizedType}]: BBox(${minX},${minY}) to (${maxX},${maxY}). Offsetting by (${autoOffsetX}, ${autoOffsetY})`)
+
+        let startLine = { x: 0, y: 0, rotation: 0 }
+        if (lineEl) {
+          const x1 = parseFloat(lineEl.getAttribute("x1") || "0")
+          const y1 = parseFloat(lineEl.getAttribute("y1") || "0")
+          const x2 = parseFloat(lineEl.getAttribute("x2") || "0")
+          const y2 = parseFloat(lineEl.getAttribute("y2") || "0")
+          
+          startLine = {
+            x: (x1 + x2) / 2 + autoOffsetX,
+            y: (y1 + y2) / 2 + autoOffsetY,
+            rotation: Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI) + 90
+          }
+        }
+        
+        setDynamicConfig({
+          main: mainPath,
+          viewBox: "0 0 2736 1536", // Standardized canvas
+          startLine,
+          // We apply the offset via a wrap <g transform> in the render
+          offsetX: autoOffsetX,
+          offsetY: autoOffsetY
+        })
+      } catch (err) {
+        console.warn(`Dynamic track failed for ${normalizedType}, falling back to hardcoded.`, err)
+        setDynamicConfig(null)
+      }
+    }
+    loadTrack()
+  }, [normalizedType, trackType])
+
+  // Get fallback points (original hardcoded data)
+  const fallbackPoints = getFallbackTrackPoints(trackType.toLowerCase())
+
+  // Final config used for rendering
+  const activeConfig = useMemo((): TrackConfig => {
+    if (dynamicConfig) return dynamicConfig
+    return {
+      main: fallbackPoints.main,
+      viewBox: "0 0 400 225",
+      startLine: fallbackPoints.startLine,
+      offsetX: 0,
+      offsetY: 0
+    }
+  }, [dynamicConfig, fallbackPoints])
 
   // Clean the SVG path for CSS path() consumption (remove extra spaces/newlines)
-  const cleanPath = trackPoints.main.replace(/\s+/g, ' ').trim()
+  const cleanPath = useMemo(() => 
+    activeConfig.main.replace(/\s+/g, ' ').trim()
+  , [activeConfig.main])
   
+  if (!activeConfig.main && !dynamicConfig) {
+    return <div className="w-full aspect-video bg-muted animate-pulse rounded-lg" />
+  }
+
   return (
-    <div className="relative w-full h-full bg-[#1a1a1a] rounded-lg overflow-hidden border-4 border-border/80 shadow-inner flex items-center justify-center">
+    <div className="relative w-full h-full bg-[#1a1a1a] rounded-lg overflow-hidden border-4 border-border/80 shadow-inner flex items-center justify-center p-2">
       
-      {/* 16:9 Layout Constraint Wrapper for perfect alignment between PNG and SVG */}
-      <div className="relative w-full max-w-5xl aspect-video">
+      {/* Container sized by the physical image aspect ratio */}
+      <div className="relative w-full max-w-5xl">
         
         {/* Physical Track Image Background */}
-        <div className="absolute inset-0 z-0">
-          <img 
-            src={`/Tracks/${normalizedType}.png`} 
-            alt={`${normalizedType} Track Layout`}
-            className="w-full h-full object-contain opacity-80"
-            style={{ imageRendering: "auto" }}
-          />
-          <div className="absolute inset-0 bg-black/20" />
-        </div>
+        <img 
+          src={`/Tracks/${normalizedType}.png`} 
+          alt={`${normalizedType} Track Layout`}
+          className="w-full h-auto block opacity-90"
+          style={{ imageRendering: "auto" }}
+        />
+        
+        {/* Add a subtle dark overlay to the image */}
+        <div className="absolute inset-0 bg-black/10 pointer-events-none" />
 
         {/* Scan line effect */}
         <div 
@@ -66,108 +163,113 @@ export function PixelTrack({ cars, trackType = "monaco", isPaused = false }: Pix
         {/* CRT glow effect */}
         <div className="absolute inset-0 pointer-events-none z-10 bg-gradient-radial from-transparent via-transparent to-black/40" />
         
+        {/* The Racing Line SVG Layer - Perfectly aligned to image bounds */}
         <svg 
-          viewBox="0 0 400 225" 
-          className="absolute inset-0 w-full h-full opacity-80 z-10"
+          viewBox={activeConfig.viewBox}
+          className="absolute inset-0 w-full h-full z-10 pointer-events-none"
           style={{ 
             filter: "drop-shadow(0 0 10px rgba(0, 0, 0, 0.5))",
             imageRendering: "pixelated" 
           }}
         >
-        {/* Invisible Track Path (Used for reference or debug) */}
-        <path
-          d={trackPoints.main}
-          fill="none"
-          stroke="transparent"
-          strokeWidth="32"
-        />
-        
-        {/* Subtle Racing Line Overlay */}
-        <path
-          d={trackPoints.main}
-          fill="none"
-          stroke="white"
-          strokeWidth="1"
-          strokeDasharray="4 8"
-          className="opacity-10"
-        />
-        
-        {/* Start/Finish line */}
-        <g transform={`translate(${trackPoints.startLine.x}, ${trackPoints.startLine.y}) rotate(${trackPoints.startLine.rotation})`}>
-          <rect x="-15" y="-2" width="30" height="4" fill="white" className="opacity-40" />
-          <rect x="-15" y="-2" width="5" height="2" fill="black" className="opacity-40" />
-          <rect x="-5" y="-2" width="5" height="2" fill="black" className="opacity-40" />
-          <rect x="5" y="-2" width="5" height="2" fill="black" className="opacity-40" />
-        </g>
-        
-        {/* Cars — using Absolute Distance + Closed Path for smooth infinite laps */}
-        {cars.map((car) => {
-          // Monotonic Clamp: Ensure target never decreases for a given car ID.
-          // This keeps cars frozen in pits or during crashes while the leader advances.
-          const prevMax = maxProgressRef.current[car.id] || 0
-          const clampedProgress = Math.max(prevMax, car.lapProgress)
-          maxProgressRef.current[car.id] = clampedProgress
+        {/* Apply Offset if the SVG was tightly cropped */}
+        <g transform={`translate(${activeConfig.offsetX || 0}, ${activeConfig.offsetY || 0})`}>
           
-          return (
-            <motion.g
-              key={car.id}
-              style={{
-                offsetPath: `path('${cleanPath}')`,
-                offsetRotate: 'auto 90deg',
-              }}
-              animate={{
-                offsetDistance: `${clampedProgress * 100}%`,
-              }}
-              transition={{
-                duration: isPaused ? 0 : 3.0,
-                ease: "linear",
-              }}
-            >
-              {/* Car shadow */}
-              <ellipse cx="1" cy="1" rx="4" ry="2" fill="rgba(0,0,0,0.5)" />
-              
-              {/* Car body (pixel style) */}
-              <rect x="-3" y="-2" width="6" height="4" fill={car.color} rx="0.5" />
-              <rect x="-1" y="-1.5" width="2" height="3" fill="rgba(255,255,255,0.3)" rx="0.2" />
-              
-              {/* Player highlight ring */}
-              {car.isPlayer && (
-                <circle 
-                  cx="0" 
-                  cy="0" 
-                  r="7" 
-                  fill="none" 
-                  stroke="#DC0000"
-                  strokeWidth="1.2"
-                  className="animate-ping"
-                  style={{ animationDuration: "1.5s" }}
-                />
-              )}
-              
-              {/* Driver name */}
-              {car.isPlayer && (
-                <text
-                  x="0"
-                  y="-8"
-                  textAnchor="middle"
-                  fill="#DC0000"
-                  fontSize="5"
-                  fontWeight="bold"
-                  style={{ fontFamily: "var(--font-pixel)", textShadow: "0 0 4px black" }}
-                >
-                  {car.name}
-                </text>
-              )}
-            </motion.g>
-          )
-        })}
+          {/* Invisible Track Path (Used for reference or debug) */}
+          <path
+            d={activeConfig.main}
+            fill="none"
+            stroke="transparent"
+            strokeWidth="100"
+          />
+          
+          {/* Subtle Racing Line Overlay */}
+          <path
+            d={activeConfig.main}
+            fill="none"
+            stroke="white"
+            strokeWidth={dynamicConfig ? 8 : 1}
+            strokeDasharray="20 40"
+            className="opacity-15"
+          />
+          
+          {/* Start/Finish line */}
+          <g transform={`translate(${activeConfig.startLine.x - (activeConfig.offsetX || 0)}, ${activeConfig.startLine.y - (activeConfig.offsetY || 0)}) rotate(${activeConfig.startLine.rotation})`}>
+            <rect x="-60" y="-8" width="120" height="16" fill="white" className="opacity-80" />
+            <rect x="-60" y="-8" width="20" height="8" fill="black" className="opacity-80" />
+            <rect x="-20" y="-8" width="20" height="8" fill="black" className="opacity-80" />
+            <rect x="20" y="-8" width="20" height="8" fill="black" className="opacity-80" />
+          </g>
+          
+          {/* Cars — using Absolute Distance + Closed Path for smooth infinite laps */}
+          {cars.map((car) => {
+            // Monotonic Clamp: Ensure target never decreases for a given car ID.
+            // This keeps cars frozen in pits or during crashes while the leader advances.
+            const prevMax = maxProgressRef.current[car.id] || 0
+            const clampedProgress = Math.max(prevMax, car.lapProgress)
+            maxProgressRef.current[car.id] = clampedProgress
+            
+            return (
+              <motion.g
+                key={car.id}
+                style={{
+                  offsetPath: `path('${cleanPath}')`,
+                  offsetRotate: 'auto 90deg',
+                }}
+                animate={{
+                  offsetDistance: `${clampedProgress * 100}%`,
+                }}
+                transition={{
+                  duration: isPaused ? 0 : 3.0,
+                  ease: "linear",
+                }}
+              >
+                {/* Car footprint shadow */}
+                <ellipse cx="1" cy="4" rx="20" ry="10" fill="rgba(0,0,0,0.6)" />
+                
+                {/* Car body (pixel style scaled for 2736x1536) */}
+                <rect x="-30" y="-20" width="60" height="40" fill={car.color} rx="4" />
+                <rect x="-10" y="-16" width="20" height="32" fill="rgba(255,255,255,0.4)" rx="2" />
+                
+                {/* Player highlight ring */}
+                {car.isPlayer && (
+                  <circle 
+                    cx="0" 
+                    cy="0" 
+                    r="70" 
+                    fill="none" 
+                    stroke="#DC0000"
+                    strokeWidth="10"
+                    className="animate-ping"
+                    style={{ animationDuration: "1.5s" }}
+                  />
+                )}
+                
+                {/* Driver name label */}
+                {car.isPlayer && (
+                  <text
+                    x="0"
+                    y="-80"
+                    textAnchor="middle"
+                    fill="#DC0000"
+                    fontSize="60"
+                    fontWeight="bold"
+                    style={{ fontFamily: "var(--font-pixel)", textShadow: "0 0 20px black" }}
+                  >
+                    {car.name}
+                  </text>
+                )}
+              </motion.g>
+            )
+          })}
+        </g>
       </svg>
-      </div> {/* End aspect-video wrapper */}
+      </div> {/* End relative wrapper */}
     </div>
   )
 }
 
-function getTrackPoints(type: string) {
+function getFallbackTrackPoints(type: string) {
   const tracks: Record<string, { main: string; startLine: { x: number; y: number; rotation: number } }> = {
     monza: {
       main: `

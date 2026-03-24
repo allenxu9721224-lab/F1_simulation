@@ -137,7 +137,7 @@ class Driver:
         return False
 
 class F1Game:
-    def __init__(self):
+    def __init__(self, track_type: str = "monaco", player_name: str = None):
         self.current_lap = 1
         self.sc_active = False
         self.sc_laps = 0
@@ -158,7 +158,8 @@ class F1Game:
                 {"id": "monza", "name": "🇮🇹 蒙扎赛道 (Monza)", "description": "速度神殿，引擎消耗极大", "laps": "53", "base_rain_prob": "0.015", "base_lap_time": "83.5"}
             ]
 
-        chosen = random.choice(tracks)
+        # Select the requested track or fallback
+        chosen = next((t for t in tracks if t["id"] == track_type), random.choice(tracks))
         self.track_info = {
             "id": chosen["id"],
             "name": chosen["name"],
@@ -178,7 +179,6 @@ class F1Game:
         self.last_prompt_reasons = []
         
         # ── Load drivers from CSV ──
-        # Dynamic ALT: driver_race_alt = track_base_lap_time * pace_modifier
         drivers_path = os.path.join(base_dir, "drivers.csv")
         try:
             with open(drivers_path, newline="", encoding="utf-8") as f:
@@ -189,7 +189,10 @@ class F1Game:
             ]
 
         self.drivers = []
+        self.player = None
         for row in rows:
+            is_p = (row["name"] == player_name) if player_name else (row.get("is_player", "False").strip().lower() == "true")
+            
             pace_mod = float(row.get("pace_modifier", 1.0))
             driver_race_alt = track_base_lap_time * pace_mod
             d = Driver(
@@ -198,16 +201,13 @@ class F1Game:
                 base_alt=driver_race_alt,
                 pit_skill=float(row["pit_skill"]),
                 rain_ability=float(row["rain_ability"]),
-                is_player=(row.get("is_player", "False").strip().lower() == "true")
+                is_player=is_p
             )
             self.drivers.append(d)
-        
-        # Assign player reference
-        self.player = None
-        for d in self.drivers:
-            if d.is_player:
+            if is_p:
                 self.player = d
-                break
+
+        # Fallback if no player found
         if self.player is None and self.drivers:
             self.drivers[0].is_player = True
             self.player = self.drivers[0]
@@ -388,6 +388,7 @@ class F1Game:
             active = sorted([d for d in self.drivers if d.status == "Racing"], key=lambda x: x.total_time)
             self.active_drivers = active
             
+            
             need_prompt, reasons, dtype = self.check_player_decision(active, weather_msg)
             if need_prompt:
                 self.decision_required = True
@@ -395,7 +396,11 @@ class F1Game:
                 self.decision_type = dtype
                 if dtype == "pit":
                     self.last_prompt_reasons = reasons
-                self.lap_phase = "process"
+                # Stay in "start" phase but return to wait for decision
+                return 
+            
+            # No decision needed, proceed to simulation
+            self.lap_phase = "process"
                 
         if self.lap_phase == "process":
             # AI Decisions
